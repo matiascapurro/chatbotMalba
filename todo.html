@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Malba Museum Chatbot</title>
+  <style>
+    /* Estilos básicos para una apariencia más elegante y moderna */
+    body {
+      font-family: 'Georgia', serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: linear-gradient(to bottom, #f0ece3, #dcd2c0);
+      margin: 0;
+    }
+    
+    .card {
+      width: 100%;
+      max-width: 600px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 16px;
+    }
+    
+    .card-header {
+      background-color: #8e7c66;
+      padding: 20px;
+      text-align: center;
+      color: #ffffff;
+    }
+    
+    .card-title {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0;
+      font-family: 'Garamond', serif;
+    }
+    
+    .card-content {
+      padding: 20px;
+      height: 400px;
+      overflow-y: auto;
+      background-color: #faf8f4;
+    }
+    
+    .message {
+      margin-bottom: 10px;
+      display: flex;
+    }
+    
+    .message.user {
+      justify-content: flex-end;
+    }
+    
+    .message.assistant {
+      justify-content: flex-start;
+    }
+    
+    .message-content {
+      padding: 12px 16px;
+      border-radius: 12px;
+      max-width: 75%;
+      line-height: 1.4;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .message.user .message-content {
+      background-color: #8e7c66;
+      color: #ffffff;
+    }
+    
+    .message.assistant .message-content {
+      background-color: #f5f3f0;
+      color: #3d3d3d;
+    }
+    
+    .card-footer {
+      display: flex;
+      padding: 16px;
+      border-top: 1px solid #e0e0e0;
+      background-color: #f0ece3;
+    }
+    
+    .card-footer input {
+      flex-grow: 1;
+      padding: 12px;
+      border: 2px solid #dcd2c0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: 'Arial', sans-serif;
+    }
+    
+    .card-footer button {
+      margin-left: 8px;
+      padding: 12px 20px;
+      background-color: #8e7c66;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: 'Arial', sans-serif;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    
+    .card-footer button:hover {
+      background-color: #7b6a57;
+    }
+    
+    /* Estilos para scrollbar */
+    .card-content::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .card-content::-webkit-scrollbar-thumb {
+      background-color: #8e7c66;
+      border-radius: 8px;
+    }
+    
+    .card-content::-webkit-scrollbar-track {
+      background-color: #f0ece3;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <h1 class="card-title">Malba Museum Chatbot</h1>
+    </div>
+    <div class="card-content" id="chatContent"></div>
+    <div class="card-footer">
+      <input type="text" id="userInput" placeholder="Type your message here..." />
+      <button id="sendButton">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const WORKER_URL = 'https://malbafinal.maeppens.workers.dev/';
+    const chatContent = document.getElementById('chatContent');
+    const userInput = document.getElementById('userInput');
+    const sendButton = document.getElementById('sendButton');
+
+    const addMessage = (role, content) => {
+      const messageElem = document.createElement('div');
+      messageElem.classList.add('message', role);
+      const contentElem = document.createElement('span');
+      contentElem.classList.add('message-content');
+      contentElem.innerText = content;
+      messageElem.appendChild(contentElem);
+      chatContent.appendChild(messageElem);
+      chatContent.scrollTop = chatContent.scrollHeight;
+    };
+
+    const handleSubmit = async () => {
+      const input = userInput.value.trim();
+      if (!input) return;
+
+      addMessage('user', input);
+      userInput.value = '';
+      sendButton.disabled = true;
+
+      try {
+        const response = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: input })
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const reader = response.body.getReader();
+        let botResponse = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = new TextDecoder().decode(value);
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              try {
+                const data = JSON.parse(line.slice(5));
+                if (data.response) {
+                  botResponse += data.response;
+                }
+              } catch (error) {
+                console.error('Error parsing JSON:', error);
+              }
+            }
+          }
+        }
+        addMessage('assistant', botResponse);
+      } catch (error) {
+        console.error('Error:', error);
+        addMessage('assistant', 'Sorry, there was an error processing your request.');
+      } finally {
+        sendButton.disabled = false;
+      }
+    };
+
+    sendButton.addEventListener('click', handleSubmit);
+    userInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleSubmit();
+    });
+  </script>
+</body>
+</html>
